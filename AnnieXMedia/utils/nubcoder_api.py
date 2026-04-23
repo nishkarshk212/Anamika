@@ -1,10 +1,29 @@
 # Authored By Certified Coders © 2025
 import requests
+import re
 from typing import List, Dict, Optional, Tuple
 from config import API_KEY, API_URL
 
 BASE_URL = API_URL or 'http://api.nubcoder.com'
 API_TOKEN = API_KEY
+
+
+def _parse_duration(duration) -> int:
+    """Parse duration to seconds. Handles both 'MM:SS' format and integer seconds."""
+    if isinstance(duration, (int, float)):
+        return int(duration)
+    if isinstance(duration, str):
+        # Handle MM:SS or HH:MM:SS format
+        parts = duration.split(':')
+        try:
+            if len(parts) == 2:  # MM:SS
+                return int(parts[0]) * 60 + int(parts[1])
+            elif len(parts) == 3:  # HH:MM:SS
+                return int(parts[0]) * 3600 + int(parts[1]) * 60 + int(parts[2])
+        except (ValueError, IndexError):
+            pass
+    return 0
+
 
 def get_video_info(url_or_query: str, max_results: int = 1) -> Dict:
     """
@@ -23,14 +42,21 @@ def get_video_info(url_or_query: str, max_results: int = 1) -> Dict:
         if 'error' in data:
             return {'error': data.get('error')}
         
+        # Handle both 'url' and 'stream_url' field names
+        stream_url = data.get('url') or data.get('stream_url', 'N/A')
+        
+        # Parse duration to seconds
+        duration_raw = data.get('duration', 0)
+        duration_seconds = _parse_duration(duration_raw)
+        
         return {
             'title': data.get('title', 'N/A'),
             'video_id': data.get('video_id', 'N/A'),
-            'duration': data.get('duration', 0),
+            'duration': duration_seconds,
             'youtube_link': data.get('youtube_link', 'N/A'),
             'channel_name': data.get('channel_name', 'N/A'),
             'views': data.get('views', 0),
-            'url': data.get('url', 'N/A'),
+            'url': stream_url,
             'thumbnail': data.get('thumbnail', 'N/A'),
             'time_taken': data.get('time_taken', 'N/A')
         }
@@ -45,7 +71,7 @@ def search_videos(query: str, max_results: int = 5) -> List[Dict]:
     try:
         response = requests.get(
             f'{BASE_URL}/search',
-            params={'token': API_TOKEN, 'q': query, 'max_results': max_results},
+            params={'q': query, 'max_results': max_results},
             timeout=30
         )
         response.raise_for_status()
@@ -56,13 +82,18 @@ def search_videos(query: str, max_results: int = 5) -> List[Dict]:
         
         results = []
         for video in data.get('results', []):
+            # Parse duration to seconds
+            duration_raw = video.get('duration', 0)
+            duration_seconds = _parse_duration(duration_raw)
+            
             results.append({
                 'title': video.get('title', 'N/A'),
                 'video_id': video.get('video_id', 'N/A'),
                 'channel_name': video.get('channel_name', 'N/A'),
-                'duration': video.get('duration', 0),
+                'duration': duration_seconds,
                 'views': video.get('views', 0),
-                'youtube_link': video.get('youtube_link', 'N/A')
+                'youtube_link': video.get('youtube_link', 'N/A'),
+                'thumbnail': video.get('thumbnail', '')
             })
         return results
     except requests.RequestException as e:
