@@ -118,6 +118,61 @@ else
     echo "   sshpass -p 'Akshay343402355468' ssh -p 22 root@161.118.250.195 'cat > /opt/AnnieXMusic/.env' < .env"
 fi
 
+# Step 5.5: Fix YouTube async compatibility
+echo "🔧 Fixing YouTube search async compatibility..."
+sshpass -p "Akshay343402355468" ssh -p $SERVER_PORT $SERVER_USER@$SERVER_IP << 'ENDSSH'
+cd /opt/AnnieXMusic
+
+# Create async compatibility shim for youtube-search-python
+cat > venv/lib/python3.10/site-packages/youtubesearchpython/aio.py << 'PYEOF'
+"""Async compatibility layer for youtube-search-python 1.5.x"""
+from youtubesearchpython import VideosSearch as SyncVideosSearch, Playlist as SyncPlaylist
+import asyncio
+from concurrent.futures import ThreadPoolExecutor
+
+_executor = ThreadPoolExecutor(max_workers=4)
+
+class VideosSearch:
+    def __init__(self, query, limit=20, region=None, language=None, timeout=None):
+        self.query = query
+        self.limit = limit
+        self.region = region
+        self.language = language
+        self.timeout = timeout
+        self._sync = SyncVideosSearch(query, limit=limit, region=region, language=language)
+    
+    async def next(self):
+        """Async wrapper for sync search"""
+        loop = asyncio.get_event_loop()
+        try:
+            result = await loop.run_in_executor(_executor, lambda: self._sync.result())
+            return result
+        except Exception as e:
+            return {"result": []}
+
+class Playlist:
+    def __init__(self, name, link=None, timeout=None):
+        self.name = name
+        self.link = link
+        self.timeout = timeout
+        if link:
+            self._sync = SyncPlaylist(name=link, link=link)
+        else:
+            self._sync = SyncPlaylist(name=name)
+    
+    async def next(self):
+        """Async wrapper for sync playlist"""
+        loop = asyncio.get_event_loop()
+        try:
+            result = await loop.run_in_executor(_executor, lambda: self._sync.result())
+            return result
+        except Exception as e:
+            return {"result": []}
+PYEOF
+
+echo "✅ YouTube async compatibility fixed"
+ENDSSH
+
 # Step 6: Create Systemd Service
 echo "⚙️  Creating systemd service..."
 sshpass -p "Akshay343402355468" ssh -p $SERVER_PORT $SERVER_USER@$SERVER_IP << 'ENDSSH'
