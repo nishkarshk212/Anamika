@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>ANAMIKA Ping</title>
+<style>
+body {
+  margin: 0;
+  font-family: 'Segoe UI', sans-serif;
+  background: linear-gradient(135deg, #9be7c4, #6fb3ff, #a58bff);
+  overflow: hidden;
+  color: white;
+}
+
+.container {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  text-align: center;
+}
+
+.text {
+  font-size: 32px;
+  opacity: 0;
+  transition: 0.5s;
+  text-shadow: 0 0 15px #00eaff;
+}
+
+.big {
+  font-size: 60px;
+  font-weight: bold;
+}
+
+.show {
+  opacity: 1;
+}
+
+.stats {
+  margin-top: 20px;
+  font-size: 20px;
+  opacity: 0;
+  transition: 0.5s;
+}
+
+.robot {
+  width: 120px;
+  height: 120px;
+  border-radius: 50%;
+  background: radial-gradient(circle, #00eaff, #003cff);
+  margin: 20px auto;
+  box-shadow: 0 0 30px #00eaff;
+  animation: float 2s infinite ease-in-out;
+}
+
+@keyframes float {
+  0% { transform: translateY(0px);}
+  50% { transform: translateY(-10px);}
+  100% { transform: translateY(0px);}
+}
+
+.wave {
+  width: 200px;
+  height: 5px;
+  background: #00eaff;
+  margin: 10px auto;
+  animation: wave 1s infinite;
+}
+
+@keyframes wave {
+  0% { transform: scaleX(0.5);}
+  50% { transform: scaleX(1);}
+  100% { transform: scaleX(0.5);}
+}
+</style>
+</head>
+
+<body>
+
+<div class="container">
+  <div id="step1" class="text">⚡ Checking System...</div>
+
+  <div id="step2" class="text">
+    🔄 Connecting to Server...
+    <div class="robot"></div>
+    <div class="wave"></div>
+  </div>
+
+  <div id="step3" class="text big">🏓 PONG!</div>
+
+  <div id="step4" class="stats">
+    ⚡ Speed: <span id="ping"></span> ms<br>
+    🎵 Music Engine: Active<br>
+    📡 Server: Online
+  </div>
+
+  <div id="final" class="text">ANAMIKA MUSIC BOT</div>
+</div>
+
+<script>
+function show(id, delay) {
+  setTimeout(() => {
+    document.getElementById(id).classList.add("show");
+  }, delay);
+}
+
+// Random ping value
+document.getElementById("ping").innerText = Math.floor(Math.random() * 40) + 10;
+
+// Animation timeline
+show("step1", 500);
+show("step2", 2000);
+show("step3", 3500);
+show("step4", 4500);
+show("final", 6000);
+</script>
+
+</body>
+</html>
