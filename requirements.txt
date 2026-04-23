@@ -13,7 +13,7 @@ google-api-python-client
 gpytranslate
 gtts
 heroku3
-httpx[http2]>=0.28.1
+httpx[http2]<0.28
 kurigram>=2.2.14
 lexica-api
 motor
@@ -42,4 +42,3 @@ unidecode
 wget
 yt-dlp[default]==2025.12.8
 youtube-search-python>=1.5.0,<1.6.0
-httpx<0.28
