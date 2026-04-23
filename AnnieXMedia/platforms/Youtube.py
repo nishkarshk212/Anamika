@@ -92,15 +92,17 @@ async def cached_youtube_search(query: str) -> List[Dict]:
             api_results = nubcoder_search(query, max_results=1)
             if api_results and len(api_results) > 0:
                 video = api_results[0]
-                # Convert NubCoder API format to expected format
-                result = [{
-                    'id': video.get('video_id', ''),
-                    'title': video.get('title', ''),
-                    'duration': str(video.get('duration', '')) if video.get('duration') else None,
-                    'thumbnail': '',
-                    'channel': {'name': video.get('channel_name', '')},
-                    'views': {'short': str(video.get('views', 0))}
-                }]
+                # Only use API result if video_id is valid
+                if video.get('video_id') != 'N/A':
+                    # Convert NubCoder API format to expected format
+                    result = [{
+                        'id': video.get('video_id', ''),
+                        'title': video.get('title', ''),
+                        'duration': str(video.get('duration', '')) if video.get('duration') else None,
+                        'thumbnail': video.get('thumbnail', ''),
+                        'channel': {'name': video.get('channel_name', '')},
+                        'views': {'short': str(video.get('views', 0))}
+                    }]
         except Exception as e:
             from AnnieXMedia.logging import LOGGER
             LOGGER(__name__).debug(f"NubCoder API search failed: {e}")
@@ -177,7 +179,7 @@ class YouTubeAPI:
         if USE_NUBCODER_API:
             try:
                 api_info = nubcoder_get_info(q, max_results=1)
-                if api_info and 'error' not in api_info:
+                if api_info and 'error' not in api_info and api_info.get('video_id') != 'N/A':
                     # Convert NubCoder API format to expected format
                     duration_sec = api_info.get('duration', 0)
                     duration_str = str(duration_sec) if duration_sec else None
@@ -258,6 +260,28 @@ class YouTubeAPI:
     async def track(self, link: str, videoid: Union[str, bool, None] = None) -> Tuple[Dict, str]:
         prepared_link = self._prepare_link(link, videoid)
 
+        # Try NubCoder API first if available
+        if USE_NUBCODER_API:
+            try:
+                api_info = nubcoder_get_info(prepared_link, max_results=1)
+                if api_info and 'error' not in api_info and api_info.get('video_id') != 'N/A':
+                    # Convert NubCoder API format to expected format
+                    duration_sec = api_info.get('duration', 0)
+                    duration_str = str(duration_sec) if duration_sec else None
+                    
+                    details = {
+                        "title": api_info.get('title', ''),
+                        "link": api_info.get('youtube_link', prepared_link),
+                        "vidid": api_info.get('video_id', ''),
+                        "duration_min": duration_str,
+                        "thumb": api_info.get('thumbnail', ''),
+                    }
+                    return details, api_info.get('video_id', '')
+            except Exception as e:
+                from AnnieXMedia.logging import LOGGER
+                LOGGER(__name__).debug(f"NubCoder API track fetch failed: {e}")
+        
+        # Fallback to youtubesearchpython
         try:
             info = await self._fetch_video_info(prepared_link)
             if not info:
@@ -317,7 +341,7 @@ class YouTubeAPI:
         if USE_NUBCODER_API:
             try:
                 api_info = nubcoder_get_info(link, max_results=1)
-                if api_info and 'error' not in api_info:
+                if api_info and 'error' not in api_info and api_info.get('video_id') != 'N/A':
                     stream_url = api_info.get('url', '')
                     if stream_url and stream_url != 'N/A':
                         return (1, stream_url)
@@ -461,7 +485,7 @@ class YouTubeAPI:
             if USE_NUBCODER_API:
                 try:
                     api_info = nubcoder_get_info(link, max_results=1)
-                    if api_info and 'error' not in api_info:
+                    if api_info and 'error' not in api_info and api_info.get('video_id') != 'N/A':
                         stream_url = api_info.get('url', '')
                         if stream_url and stream_url != 'N/A':
                             return stream_url, None
