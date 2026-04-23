@@ -41,4 +41,5 @@ pytgcrypto
 unidecode
 wget
 yt-dlp[default]==2025.12.8
-yt-search-python
+youtube-search-python>=1.5.0,<1.6.0
+httpx<0.28
