@@ -123,19 +123,26 @@ async def close_http_session() -> None:
 
 async def download_file(url: str, out_path: str) -> Optional[str]:
     if not url:
+        LOGGER.error("download_file: URL is empty")
         return None
     try:
+        LOGGER.info(f"download_file: Downloading from URL to {out_path}")
         session = await get_http_session()
         async with session.get(url) as resp:
+            LOGGER.info(f"download_file: Response status: {resp.status}")
             if resp.status != 200:
+                LOGGER.error(f"download_file: HTTP {resp.status}")
                 return None
             async with aiofiles.open(out_path, "wb") as f:
                 async for chunk in resp.content.iter_chunked(CHUNK_SIZE):
                     if not chunk:
                         break
                     await f.write(chunk)
-        return out_path if os.path.exists(out_path) else None
-    except Exception:
+        result = out_path if os.path.exists(out_path) else None
+        LOGGER.info(f"download_file: Success={result is not None}, File exists={os.path.exists(out_path)}")
+        return result
+    except Exception as e:
+        LOGGER.error(f"download_file: Exception: {e}")
         return None
 
 
@@ -150,21 +157,30 @@ async def api_download_audio(link: str) -> Optional[str]:
         session = await get_http_session()
         # New API: /info?token=API_KEY&q=VIDEO_URL
         api_url_new = f"{API_URL}/info?token={API_KEY}&q=https://www.youtube.com/watch?v={vid}"
+        LOGGER.info(f"Trying NubCoder API: {api_url_new}")
         async with session.get(api_url_new, timeout=aiohttp.ClientTimeout(total=60)) as r:
             if r.status == 200:
                 data = await r.json()
+                LOGGER.info(f"API Response keys: {list(data.keys())}")
+                # Check for both 'url' and 'stream_url' fields (API returns 'stream_url')
+                stream_url = data.get('url') or data.get('stream_url')
+                LOGGER.info(f"API Response: {data.get('title', 'Unknown')} - Stream URL present: {bool(stream_url and stream_url != 'N/A')}")
                 # Check if new API format succeeded
-                if 'url' in data and data.get('url') != 'N/A':
-                    stream_url = data.get('url')
+                if stream_url and stream_url != 'N/A':
                     title = data.get('title', 'Unknown')
                     fmt = data.get('format', 'webm')
                     out_path = f"{DOWNLOAD_DIR}/{vid}.{fmt}"
+                    LOGGER.info(f"Downloading from API stream URL to: {out_path}")
                     result = await download_file(stream_url, out_path)
                     if result:
                         log_download_source(title, "NubCoder API")
+                    else:
+                        LOGGER.error(f"Failed to download file from API stream URL")
                     return result
+                else:
+                    LOGGER.warning(f"API response missing stream URL or URL is 'N/A'")
     except Exception as e:
-        LOGGER.debug(f"New API format failed: {e}")
+        LOGGER.error(f"New API format failed: {e}")
     
     # Fallback to old API format
     if not USE_AUDIO_API:
@@ -205,9 +221,10 @@ async def api_download_video(link: str) -> Optional[str]:
         async with session.get(api_url_new, timeout=aiohttp.ClientTimeout(total=60)) as r:
             if r.status == 200:
                 data = await r.json()
+                # Check for both 'url' and 'stream_url' fields (API returns 'stream_url')
+                stream_url = data.get('url') or data.get('stream_url')
                 # Check if new API format succeeded
-                if 'url' in data and data.get('url') != 'N/A':
-                    stream_url = data.get('url')
+                if stream_url and stream_url != 'N/A':
                     title = data.get('title', 'Unknown')
                     fmt = data.get('format', 'mp4')
                     out_path = f"{DOWNLOAD_DIR}/{vid}.{fmt}"

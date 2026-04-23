@@ -346,18 +346,30 @@ class Call:
                 db[chat_id][0]["markup"] = "tg"
 
             elif "vid_" in queued:
+                # OPTIMIZATION: Check if file was pre-downloaded in background
+                from AnnieXMedia.utils.downloader import find_cached_file
+                
                 mystic = await app.send_message(original_chat_id, _["call_7"])
-                try:
-                    file_path, direct = await YouTube.download(
-                        videoid,
-                        mystic,
-                        videoid=True,
-                        video=True if str(streamtype) == "video" else False,
-                    )
-                except:
-                    return await mystic.edit_text(
-                        _["call_6"], disable_web_page_preview=True
-                    )
+                
+                # Try to use pre-downloaded file first
+                file_path = find_cached_file(videoid)
+                direct = False
+                
+                if not file_path:
+                    # File not pre-downloaded, download now
+                    try:
+                        file_path, direct = await YouTube.download(
+                            videoid,
+                            mystic,
+                            videoid=True,
+                            video=True if str(streamtype) == "video" else False,
+                        )
+                    except:
+                        return await mystic.edit_text(
+                            _["call_6"], disable_web_page_preview=True
+                        )
+                else:
+                    LOGGER.info(f"⚡ Using pre-downloaded file for instant playback: {file_path}")
 
                 stream = dynamic_media_stream(path=file_path, video=video)
                 try:

@@ -89,10 +89,10 @@ def search_videos(query: str, max_results: int = 5) -> List[Dict]:
             results.append({
                 'title': video.get('title', 'N/A'),
                 'video_id': video.get('video_id', 'N/A'),
-                'channel_name': video.get('channel_name', 'N/A'),
+                'channel_name': video.get('channel_name', video.get('channel', 'N/A')),
                 'duration': duration_seconds,
                 'views': video.get('views', 0),
-                'youtube_link': video.get('youtube_link', 'N/A'),
+                'youtube_link': video.get('youtube_link', video.get('url', 'N/A')),
                 'thumbnail': video.get('thumbnail', '')
             })
         return results

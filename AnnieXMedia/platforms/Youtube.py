@@ -12,6 +12,7 @@ from pyrogram.enums import MessageEntityType
 from pyrogram.types import Message
 from youtubesearchpython.aio import VideosSearch, Playlist
 
+from AnnieXMedia import LOGGER
 from AnnieXMedia.utils.cookie_handler import COOKIE_PATH
 from AnnieXMedia.utils.database import is_on_off
 from AnnieXMedia.utils.downloader import yt_dlp_download
@@ -485,13 +486,18 @@ class YouTubeAPI:
             if USE_NUBCODER_API:
                 try:
                     api_info = nubcoder_get_info(link, max_results=1)
+                    LOGGER(__name__).info(f"NubCoder API response keys: {list(api_info.keys()) if api_info else 'None'}")
                     if api_info and 'error' not in api_info and api_info.get('video_id') != 'N/A':
-                        stream_url = api_info.get('url', '')
+                        # Check both 'url' and 'stream_url' fields
+                        stream_url = api_info.get('url') or api_info.get('stream_url', '')
+                        LOGGER(__name__).info(f"Stream URL present: {bool(stream_url and stream_url != 'N/A')}")
                         if stream_url and stream_url != 'N/A':
+                            LOGGER(__name__).info("Returning stream URL from NubCoder API")
                             return stream_url, None
+                        else:
+                            LOGGER(__name__).warning("Stream URL is empty or 'N/A'")
                 except Exception as e:
-                    from AnnieXMedia.logging import LOGGER
-                    LOGGER(__name__).debug(f"NubCoder API download failed: {e}")
+                    LOGGER(__name__).error(f"NubCoder API download failed: {e}")
 
             stdout, _ = await _exec_proc(
                 "yt-dlp",
@@ -505,6 +511,25 @@ class YouTubeAPI:
                 return stdout.decode().split("\n")[0], None
             return None, None
 
-        # For audio, use yt_dlp_download which already has API integration
+        # For audio, try NubCoder API first for instant streaming
+        if USE_NUBCODER_API:
+            try:
+                # Run sync API call in executor to avoid blocking
+                loop = asyncio.get_event_loop()
+                api_info = await loop.run_in_executor(
+                    None, 
+                    lambda: nubcoder_get_info(link, max_results=1)
+                )
+                LOGGER(__name__).info(f"⚡ NubCoder API audio response: {api_info.get('title', 'Unknown') if api_info else 'None'}")
+                if api_info and 'error' not in api_info and api_info.get('video_id') != 'N/A':
+                    # Check both 'url' and 'stream_url' fields
+                    stream_url = api_info.get('url') or api_info.get('stream_url', '')
+                    if stream_url and stream_url != 'N/A':
+                        LOGGER(__name__).info("⚡ Audio stream URL ready - instant playback!")
+                        return stream_url, None
+            except Exception as e:
+                LOGGER(__name__).debug(f"NubCoder API audio stream failed: {e}")
+        
+        # Fallback to download
         p = await yt_dlp_download(link, type="audio", title=await self.title(link))
         return (p, True) if p else (None, None)

@@ -16,6 +16,7 @@ from AnnieXMedia.utils.pastebin import ANNIEBIN
 from AnnieXMedia.utils.stream.queue import put_queue, put_queue_index
 from AnnieXMedia.utils.thumbnails import get_thumb
 from AnnieXMedia.utils.errors import capture_internal_err
+from AnnieXMedia.logging import LOGGER
 
 
 @capture_internal_err
@@ -157,99 +158,115 @@ async def stream(
         direct = False
         
         try:
-            # First, try to get direct stream URL (faster - no download)
-            from AnnieXMedia.utils.downloader import extract_video_id, get_ytdlp_base_opts
+            # First, check if file is already downloaded (cache)
+            from AnnieXMedia.utils.downloader import extract_video_id, get_ytdlp_base_opts, find_cached_file
             import asyncio
             import sys
             import io
             
-            loop = asyncio.get_event_loop()
             vid = extract_video_id(link)
             
-            def get_stream_url():
-                try:
-                    from yt_dlp import YoutubeDL
-                    opts = get_ytdlp_base_opts()
-                    opts["format"] = "bestaudio" if not is_video else "bestvideo[height<=?720]+bestaudio"
-                    opts["download"] = False  # Don't download, just get URL
-                    
-                    # Suppress error output
-                    old_stderr = sys.stderr
-                    sys.stderr = io.StringIO()
-                    
+            # Check cache first for instant playback
+            cached_file = find_cached_file(vid)
+            if cached_file:
+                file_path = cached_file
+                direct = False
+                LOGGER(__name__).info(f"⚡ Using cached file for instant playback: {file_path}")
+            else:
+                # Try to get direct stream URL (instant - no download)
+                loop = asyncio.get_event_loop()
+                
+                def get_stream_url():
                     try:
-                        with YoutubeDL(opts) as ydl:
-                            info = ydl.extract_info(f"https://www.youtube.com/watch?v={vid}", download=False)
-                            return info.get("url"), info
-                    finally:
-                        sys.stderr = old_stderr
-                except:
-                    return None, None
-            
-            stream_url, info = await loop.run_in_executor(None, get_stream_url)
-            
-            if stream_url:
-                # Use direct stream URL for instant playback
-                if await is_active_chat(chat_id):
-                    await put_queue(
-                        chat_id,
-                        original_chat_id,
-                        f"vid_{vidid}",
-                        title,
-                        duration_min,
-                        user_name,
-                        vidid,
-                        user_id,
-                        "video" if is_video else "audio",
-                    )
-                    position = len(db.get(chat_id)) - 1
-                    button = aq_markup(_, chat_id)
-                    await app.send_message(
-                        chat_id=original_chat_id,
-                        text=_["queue_4"].format(position, title[:27], duration_min, user_name),
-                        reply_markup=InlineKeyboardMarkup(button),
-                    )
-                else:
-                    if not forceplay:
-                        db[chat_id] = []
-                    # Join voice chat immediately with stream URL (milliseconds!)
-                    await StreamController.join_call(
-                        chat_id,
-                        original_chat_id,
-                        stream_url,
-                        video=is_video,
-                        image=thumbnail,
-                    )
-                    await put_queue(
-                        chat_id,
-                        original_chat_id,
-                        stream_url,
-                        title,
-                        duration_min,
-                        user_name,
-                        vidid,
-                        user_id,
-                        "video" if is_video else "audio",
-                        forceplay=forceplay,
-                    )
-                    img = await get_thumb(vidid)
-                    button = stream_markup(_, chat_id)
-                    run = await app.send_photo(
-                        original_chat_id,
-                        photo=img,
-                        caption=_["stream_1"].format(
-                            f"https://t.me/{app.username}?start=info_{vidid}",
-                            title[:23],
+                        from yt_dlp import YoutubeDL
+                        opts = get_ytdlp_base_opts()
+                        opts["format"] = "bestaudio" if not is_video else "bestvideo[height<=?720]+bestaudio"
+                        opts["download"] = False  # Don't download, just get URL
+                        
+                        # Suppress error output
+                        old_stderr = sys.stderr
+                        sys.stderr = io.StringIO()
+                        
+                        try:
+                            with YoutubeDL(opts) as ydl:
+                                info = ydl.extract_info(f"https://www.youtube.com/watch?v={vid}", download=False)
+                                return info.get("url"), info
+                        finally:
+                            sys.stderr = old_stderr
+                    except:
+                        return None, None
+                
+                # Get stream URL and join voice chat in parallel for maximum speed
+                stream_url, info = await loop.run_in_executor(None, get_stream_url)
+                
+                if stream_url:
+                    LOGGER(__name__).info(f"⚡ Direct stream URL obtained - playing instantly!")
+                    # Use direct stream URL for instant playback
+                    if await is_active_chat(chat_id):
+                        await put_queue(
+                            chat_id,
+                            original_chat_id,
+                            f"vid_{vidid}",
+                            title,
                             duration_min,
                             user_name,
-                        ),
-                        reply_markup=InlineKeyboardMarkup(button),
-                    )
-                    db[chat_id][0]["mystic"] = run
-                    db[chat_id][0]["markup"] = "stream"
-                    return
+                            vidid,
+                            user_id,
+                            "video" if is_video else "audio",
+                        )
+                        position = len(db.get(chat_id)) - 1
+                        button = aq_markup(_, chat_id)
+                        await app.send_message(
+                            chat_id=original_chat_id,
+                            text=_["queue_4"].format(position, title[:27], duration_min, user_name),
+                            reply_markup=InlineKeyboardMarkup(button),
+                        )
+                    else:
+                        if not forceplay:
+                            db[chat_id] = []
+                        # Join voice chat immediately with stream URL (milliseconds!)
+                        LOGGER(__name__).info(f"⚡ Joining voice chat with stream URL...")
+                        await StreamController.join_call(
+                            chat_id,
+                            original_chat_id,
+                            stream_url,
+                            video=is_video,
+                            image=thumbnail,
+                        )
+                        await put_queue(
+                            chat_id,
+                            original_chat_id,
+                            stream_url,
+                            title,
+                            duration_min,
+                            user_name,
+                            vidid,
+                            user_id,
+                            "video" if is_video else "audio",
+                            forceplay=forceplay,
+                        )
+                        img = await get_thumb(vidid)
+                        button = stream_markup(_, chat_id)
+                        run = await app.send_photo(
+                            original_chat_id,
+                            photo=img,
+                            caption=_["stream_1"].format(
+                                f"https://t.me/{app.username}?start=info_{vidid}",
+                                title[:23],
+                                duration_min,
+                                user_name,
+                            ),
+                            reply_markup=InlineKeyboardMarkup(button),
+                        )
+                        db[chat_id][0]["mystic"] = run
+                        db[chat_id][0]["markup"] = "stream"
+                        
+                        # Start background download for better quality version
+                        asyncio.create_task(_download_for_cache(vidid, title))
+                        LOGGER(__name__).info(f"⚡ Song playing! Background caching started.")
+                        return
         except Exception as e:
-            pass  # Fallback to download method if streaming fails
+            LOGGER(__name__).debug(f"Stream URL method failed: {e}")  # Fallback to download method if streaming fails
         
         # FALLBACK: Download file (slower but reliable)
         try:
@@ -549,3 +566,28 @@ async def stream(
             db[chat_id][0]["mystic"] = run
             db[chat_id][0]["markup"] = "tg"
             await mystic.delete()
+
+
+async def _download_for_cache(vidid: str, title: str):
+    """Download video in background for caching while streaming"""
+    try:
+        from AnnieXMedia import YouTube
+        from AnnieXMedia.logging import LOGGER
+        
+        LOGGER.info(f"🔄 Background caching started: {title}")
+        
+        # Download the file in background for future use
+        file_path, direct = await YouTube.download(
+            vidid,
+            None,  # No mystic message for background downloads
+            videoid=True,
+            video=False,  # Audio only for faster download
+        )
+        
+        if file_path:
+            LOGGER.info(f"✅ Background caching completed: {title} -> {file_path}")
+        else:
+            LOGGER.warning(f"❌ Background caching failed: {title}")
+    except Exception as e:
+        from AnnieXMedia.logging import LOGGER
+        LOGGER.error(f"❌ Background caching error for {title}: {e}")
