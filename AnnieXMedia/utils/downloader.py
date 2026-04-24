@@ -185,17 +185,20 @@ async def api_download_audio(link: str) -> Optional[str]:
     # Fallback to old API format
     if not USE_AUDIO_API:
         return None
-    poll_url = f"{API_URL}/song/{vid}?api={API_KEY}"
+    # Use pvtz.nexgenbots.xyz for poll-based downloads
+    api_base = "https://pvtz.nexgenbots.xyz"
+    poll_url = f"{api_base}/song/{vid}?api={API_KEY}"
     try:
         session = await get_http_session()
-        while True:
-            async with session.get(poll_url) as r:
+        for _ in range(10): # Max 10 retries
+            async with session.get(poll_url, ssl=False) as r:
                 if r.status != 200:
-                    return None
+                    await asyncio.sleep(4)
+                    continue
                 data = await r.json()
                 status = str(data.get("status", "")).lower()
                 if status == "downloading":
-                    await asyncio.sleep(1.0)
+                    await asyncio.sleep(4)
                     continue
                 if status != "done":
                     return None

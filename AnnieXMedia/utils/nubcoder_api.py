@@ -69,10 +69,13 @@ def search_videos(query: str, max_results: int = 5) -> List[Dict]:
     Returns list of dicts with: title, video_id, channel_name, duration, views, youtube_link
     """
     try:
+        # Prioritize api.nubcoder.com for search as it works with token
+        search_url = 'https://api.nubcoder.com/search'
         response = requests.get(
-            f'{BASE_URL}/search',
-            params={'q': query, 'max_results': max_results},
-            timeout=30
+            search_url,
+            params={'token': API_TOKEN, 'q': query, 'max_results': max_results},
+            timeout=30,
+            verify=False
         )
         response.raise_for_status()
         data = response.json()
